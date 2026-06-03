@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import auth, rooms, messages, dms
+from routers import auth, rooms, messages, dms, websocket
 
 app = FastAPI(
     title="Voxify API",
@@ -24,6 +24,7 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(rooms.router, prefix="/api/v1")
 app.include_router(messages.router, prefix="/api/v1")
 app.include_router(dms.router, prefix="/api/v1")
+app.include_router(websocket.router)
 
 @app.get("/")
 async def root():

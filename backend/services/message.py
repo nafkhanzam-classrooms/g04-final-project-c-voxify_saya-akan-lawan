@@ -3,6 +3,7 @@ from fastapi import HTTPException, status
 from repositories.message import MessageRepository
 from repositories.room import RoomRepository
 from schema.message import MessageCreate, MessageRead, ReactionSummary
+from services.websocket_manager import manager
 
 
 class MessageService:
@@ -33,10 +34,25 @@ class MessageService:
         
         await self.message_repo.session.commit()
         
-        # We need to refresh/load relations for the response
-        # Actually, our repository 'get' doesn't joinedload by default in Base.
-        # For a new message, we know the sender is the current user.
-        return MessageRead.model_validate(new_message)
+        # Reload message with sender and reactions to match MessageRead
+        # We fetch the latest message for this room which should be the one we just created
+        messages = await self.message_repo.get_room_messages(room_id, limit=1)
+        if not messages:
+            msg_read = MessageRead.model_validate(new_message)
+        else:
+            msg_read = MessageRead.model_validate(messages[0])
+
+        # Broadcast to room members via WebSocket
+        await manager.broadcast_to_room(
+            room_id, 
+            {
+                "type": "new_message",
+                "room_id": str(room_id),
+                "message": msg_read.model_dump(mode="json")
+            }
+        )
+        
+        return msg_read
 
     async def get_messages(
         self, room_id: UUID, user_id: UUID, limit: int = 50, before_id: UUID | None = None

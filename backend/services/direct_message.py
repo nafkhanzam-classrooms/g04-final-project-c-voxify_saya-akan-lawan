@@ -5,6 +5,7 @@ from repositories.direct_message import DirectMessageRepository
 from repositories.user import UserRepository
 from schema.direct_message import DMCreate, DMRead, ConversationRead
 from schema.user import UserShort
+from services.websocket_manager import manager
 
 
 class DirectMessageService:
@@ -29,7 +30,21 @@ class DirectMessageService:
         new_dm = await self.dm_repo.create(**dm_data)
         await self.dm_repo.session.commit()
         
-        return DMRead.model_validate(new_dm)
+        # Load sender for the response
+        sender = await self.user_repo.get(sender_id)
+        dm_read = DMRead.model_validate(new_dm)
+        dm_read.sender = UserShort.model_validate(sender)
+        
+        # Send via WebSocket to receiver
+        await manager.send_personal_message(
+            {
+                "type": "new_dm",
+                "message": dm_read.model_dump(mode="json")
+            },
+            dm_in.receiver_id
+        )
+        
+        return dm_read
 
     async def get_history(
         self, user_id: UUID, other_user_id: UUID, limit: int = 50, before_id: UUID | None = None
