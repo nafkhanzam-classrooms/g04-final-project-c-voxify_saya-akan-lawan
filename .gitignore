@@ -1,0 +1,5 @@
+backend/.venv
+AGENTS.md
+GEMINI.md
+__pycache__
+.env
