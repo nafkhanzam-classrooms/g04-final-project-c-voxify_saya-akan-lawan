@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 class Message(Base):
     __tablename__ = "messages"
 
-    id: Mapped[uuid_pk]
     room_id: Mapped[UUID] = mapped_column(ForeignKey("rooms.id"))
     sender_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
     

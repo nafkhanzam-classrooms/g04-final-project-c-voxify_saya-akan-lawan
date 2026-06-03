@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import TIMESTAMP, Boolean, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from models.base import Base, uuid_pk
+from models.base import Base
 
 if TYPE_CHECKING:
     from models.message import Message
@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 class Room(Base):
     __tablename__ = "rooms"
 
-    id: Mapped[uuid_pk]
     name: Mapped[str] = mapped_column(String(100))
     topic: Mapped[Optional[str]] = mapped_column(String(255))
     avatar_url: Mapped[Optional[str]] = mapped_column(String(255))

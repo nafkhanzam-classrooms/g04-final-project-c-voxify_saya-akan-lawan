@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 class Reaction(Base):
     __tablename__ = "reactions"
 
-    id: Mapped[uuid_pk]
     message_id: Mapped[UUID] = mapped_column(ForeignKey("messages.id"))
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
     emoji: Mapped[str] = mapped_column(String(50))

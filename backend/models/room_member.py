@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from models.base import Base, timestamp, uuid_pk
+from models.base import Base, timestamp
 
 if TYPE_CHECKING:
     from models.room import Room
@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 class RoomMember(Base):
     __tablename__ = "room_members"
 
-    id: Mapped[uuid_pk]
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
     room_id: Mapped[UUID] = mapped_column(ForeignKey("rooms.id"))
     role: Mapped[str] = mapped_column(String(20), default="member")

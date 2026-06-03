@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[uuid_pk]
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))

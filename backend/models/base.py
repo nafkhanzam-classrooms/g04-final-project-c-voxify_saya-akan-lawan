@@ -6,11 +6,6 @@ from sqlalchemy import DateTime
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
-class Base(DeclarativeBase):
-    """Base class for all models."""
-    pass
-
-
 # Common types
 uuid_pk = Annotated[UUID, mapped_column(primary_key=True, default=uuid4)]
 timestamp = Annotated[datetime, mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))]
@@ -22,3 +17,8 @@ updated_at = Annotated[
         onupdate=lambda: datetime.now(timezone.utc),
     ),
 ]
+
+
+class Base(DeclarativeBase):
+    """Base class for all models."""
+    id: Mapped[uuid_pk]
