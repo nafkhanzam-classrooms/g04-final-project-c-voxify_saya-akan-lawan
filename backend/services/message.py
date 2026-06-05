@@ -1,9 +1,9 @@
 from uuid import UUID
-from fastapi import HTTPException, status
 from repositories.message import MessageRepository
 from repositories.room import RoomRepository
 from schema.message import MessageCreate, MessageRead, ReactionSummary
 from services.websocket_manager import manager
+from utils.exceptions import AppException
 
 
 class MessageService:
@@ -16,10 +16,7 @@ class MessageService:
     ) -> MessageRead:
         # Check if user is member of room
         if not await self.room_repo.is_member(room_id, sender_id):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not a member of this room."
-            )
+            raise AppException("You are not a member of this room.", 403)
             
         message_data = message_in.model_dump()
         message_data.update({
@@ -35,7 +32,6 @@ class MessageService:
         await self.message_repo.session.commit()
         
         # Reload message with sender and reactions to match MessageRead
-        # We fetch the latest message for this room which should be the one we just created
         messages = await self.message_repo.get_room_messages(room_id, limit=1)
         if not messages:
             msg_read = MessageRead.model_validate(new_message)
@@ -58,10 +54,7 @@ class MessageService:
         self, room_id: UUID, user_id: UUID, limit: int = 50, before_id: UUID | None = None
     ) -> list[MessageRead]:
         if not await self.room_repo.is_member(room_id, user_id):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not a member of this room."
-            )
+            raise AppException("You are not a member of this room.", 403)
             
         messages = await self.message_repo.get_room_messages(room_id, limit, before_id)
         

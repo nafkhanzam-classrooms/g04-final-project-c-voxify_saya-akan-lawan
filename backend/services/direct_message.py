@@ -1,11 +1,11 @@
 from datetime import datetime
 from uuid import UUID
-from fastapi import HTTPException, status
 from repositories.direct_message import DirectMessageRepository
 from repositories.user import UserRepository
 from schema.direct_message import DMCreate, DMRead, ConversationRead
 from schema.user import UserShort
 from services.websocket_manager import manager
+from utils.exceptions import AppException
 
 
 class DirectMessageService:
@@ -19,10 +19,7 @@ class DirectMessageService:
         # Check if receiver exists
         receiver = await self.user_repo.get(dm_in.receiver_id)
         if not receiver:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Receiver user not found."
-            )
+            raise AppException("Receiver user not found.", 404)
             
         dm_data = dm_in.model_dump()
         dm_data["sender_id"] = sender_id
@@ -36,7 +33,7 @@ class DirectMessageService:
         dm_read.sender = UserShort.model_validate(sender)
         
         # Send via WebSocket to receiver
-        await manager.send_personal_message(
+        manager.send_personal_message(
             {
                 "type": "new_dm",
                 "message": dm_read.model_dump(mode="json")
