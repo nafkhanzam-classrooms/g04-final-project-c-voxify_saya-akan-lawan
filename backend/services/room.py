@@ -2,10 +2,9 @@ import random
 import string
 from uuid import UUID
 
-from fastapi import HTTPException, status
-
 from repositories.room import RoomRepository
 from schema.room import RoomCreate, RoomRead
+from services.exceptions import AppException
 
 
 class RoomService:
@@ -36,15 +35,15 @@ class RoomService:
     async def join_room(self, invite_code: str, user_id: UUID) -> RoomRead:
         room = await self.room_repo.get_by_invite_code(invite_code)
         if not room:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Room not found with the provided invite code.",
+            raise AppException(
+                status=404,
+                message="Room not found with the provided invite code.",
             )
 
         if await self.room_repo.is_member(room.id, user_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="You are already a member of this room.",
+            raise AppException(
+                status=400,
+                message="You are already a member of this room.",
             )
 
         await self.room_repo.add_member(room.id, user_id)
