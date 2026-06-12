@@ -1,5 +1,6 @@
 from uuid import UUID
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.room import Room
 from models.room_member import RoomMember
@@ -37,3 +38,21 @@ class RoomRepository(BaseRepository[Room]):
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none() is not None
+
+    async def remove_member(self, room_id: UUID, user_id: UUID) -> bool:
+        from sqlalchemy import delete
+        query = delete(RoomMember).where(
+            RoomMember.room_id == room_id, RoomMember.user_id == user_id
+        )
+        result = await self.session.execute(query)
+        return result.rowcount > 0
+
+    async def get_room_members(self, room_id: UUID) -> list[RoomMember]:
+        query = (
+            select(RoomMember)
+            .where(RoomMember.room_id == room_id)
+            .options(joinedload(RoomMember.user))
+        )
+        result = await self.session.execute(query)
+        return list(result.scalars().unique().all())
+

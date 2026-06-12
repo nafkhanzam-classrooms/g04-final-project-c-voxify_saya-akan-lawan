@@ -1,14 +1,8 @@
 from datetime import timedelta
-
 from repositories.user import UserRepository
-from schema.user import Token, UserCreate, UserLogin, UserRead
-from services.exceptions import AppException
-from services.security import (
-    ACCESS_TOKEN_EXPIRE_MINUTES,
-    create_access_token,
-    get_password_hash,
-    verify_password,
-)
+from schema.user import UserCreate, UserLogin, Token, UserRead
+from services.security import get_password_hash, verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from utils.exceptions import AppException
 
 
 class AuthService:
@@ -19,17 +13,11 @@ class AuthService:
         # Check if user exists
         existing_user = await self.user_repo.get_by_email(user_in.email)
         if existing_user:
-            raise AppException(
-                status=400,
-                message="A user with this email already exists.",
-            )
-
+            raise AppException("A user with this email already exists.", 400)
+        
         existing_username = await self.user_repo.get_by_username(user_in.username)
         if existing_username:
-            raise AppException(
-                status=400,
-                message="This username is already taken.",
-            )
+            raise AppException("This username is already taken.", 400)
 
         # Create user
         hashed_password = get_password_hash(user_in.password)
@@ -43,10 +31,7 @@ class AuthService:
     async def login(self, login_data: UserLogin) -> Token:
         user = await self.user_repo.get_by_username(login_data.username)
         if not user or not verify_password(login_data.password, user.hashed_password):
-            raise AppException(
-                status=401,
-                message="Incorrect username or password",
-            )
+            raise AppException("Incorrect username or password", 401)
 
         # Update online status
         await self.user_repo.update_online_status(user.id, True)

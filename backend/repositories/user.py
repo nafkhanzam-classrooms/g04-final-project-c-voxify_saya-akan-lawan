@@ -21,3 +21,9 @@ class UserRepository(BaseRepository[User]):
 
     async def update_online_status(self, user_id: UUID, is_online: bool) -> User | None:
         return await self.update(user_id, is_online=is_online)
+
+    async def get_online_users(self) -> list[User]:
+        query = select(User).where(User.is_online == True)
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+
