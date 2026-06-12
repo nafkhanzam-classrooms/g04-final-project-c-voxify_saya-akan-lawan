@@ -27,7 +27,6 @@ class BaseRepository(Generic[ModelType]):
         db_obj = self.model(**kwargs)
         self.session.add(db_obj)
         await self.session.flush()
-        await self.session.refresh(db_obj)
         return db_obj
 
     async def update(self, id: UUID, **kwargs: Any) -> ModelType | None:

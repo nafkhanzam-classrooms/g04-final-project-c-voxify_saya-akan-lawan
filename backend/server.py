@@ -67,6 +67,14 @@ class ThreadedTCPServer:
                             manager.disconnect(user_id)
                         user_id = new_user_id
                         manager.connect(user_id, client_sock)
+                        # Broadcast user online
+                        manager.broadcast_global({
+                            "type": "user_presence",
+                            "user_id": str(user_id),
+                            "is_online": True,
+                            "username": response["data"]["user"]["username"],
+                            "display_name": response["data"]["user"].get("display_name")
+                        })
                     send_message(client_sock, response)
                     print(f"[<] Response: {response.get('status')} for {action}")
 
@@ -75,6 +83,12 @@ class ThreadedTCPServer:
                     if user_id and room_id:
                         manager.join_room(UUID(room_id), user_id)
                         send_message(client_sock, {"status": "success", "message": "Joined room socket"})
+
+                elif action == "room.leave_socket":
+                    room_id = request.get("data", {}).get("room_id")
+                    if user_id and room_id:
+                        manager.leave_room(UUID(room_id), user_id)
+                        send_message(client_sock, {"status": "success", "message": "Left room socket"})
 
                 else:
                     response = loop.run_until_complete(dispatcher.dispatch(request, client_id=user_id))
@@ -86,9 +100,38 @@ class ThreadedTCPServer:
         finally:
             if user_id:
                 manager.disconnect(user_id)
+                # Set user offline di database
+                try:
+                    loop.run_until_complete(self._set_user_offline(user_id))
+                except Exception as e:
+                    print(f"[!] Failed to set user offline: {e}")
+                
+                # Broadcast user offline
+                manager.broadcast_global({
+                    "type": "user_presence",
+                    "user_id": str(user_id),
+                    "is_online": False
+                })
             loop.close()
             client_sock.close()
             print("[*] Client disconnected")
+
+    async def _set_user_offline(self, user_id: UUID):
+        """Helper async untuk update status online user saat disconnect."""
+        from sqlalchemy.pool import NullPool
+        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+        from db.config import DATABASE_URL
+        from repositories.user import UserRepository
+
+        engine = create_async_engine(DATABASE_URL, poolclass=NullPool)
+        session_maker = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            async with session_maker() as session:
+                user_repo = UserRepository(session)
+                await user_repo.update_online_status(user_id, False)
+                await session.commit()
+        finally:
+            await engine.dispose()
 
     def stop(self):
         self.is_running = False

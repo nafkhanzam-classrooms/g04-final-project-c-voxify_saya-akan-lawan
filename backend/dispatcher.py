@@ -15,9 +15,9 @@ from services.auth import AuthService
 from services.room import RoomService
 from services.message import MessageService
 from services.direct_message import DirectMessageService
-from schema.user import UserCreate, UserLogin, UserRead
-from schema.room import RoomCreate, RoomJoin
-from schema.message import MessageCreate
+from schema.user import UserCreate, UserLogin, UserRead, UserShort
+from schema.room import RoomCreate, RoomJoin, RoomMemberRead
+from schema.message import MessageCreate, ReactionBase
 from schema.direct_message import DMCreate
 from utils.exceptions import AppException
 
@@ -94,6 +94,16 @@ class Dispatcher:
                         result = await room_service.get_my_rooms(user_id)
                         return {"status": "success", "action": action, "data": [r.model_dump(mode="json") for r in result]}
 
+                    elif action == "room.leave":
+                        room_id = UUID(data.get("room_id"))
+                        await room_service.leave_room(room_id, user_id)
+                        return {"status": "success", "action": action, "message": "Left room successfully"}
+
+                    elif action == "room.members":
+                        room_id = UUID(data.get("room_id"))
+                        result = await room_service.get_room_members(room_id, user_id)
+                        return {"status": "success", "action": action, "data": [m.model_dump(mode="json") for m in result]}
+
                     # ── 3. Message Actions ─────────────────────────────────────
                     elif action == "message.send":
                         room_id = UUID(data.get("room_id"))
@@ -119,6 +129,36 @@ class Dispatcher:
                     elif action == "dm.conversations":
                         result = await dm_service.get_my_conversations(user_id)
                         return {"status": "success", "action": action, "data": [c.model_dump(mode="json") for c in result]}
+
+                    elif action == "dm.history":
+                        other_user_id = UUID(data.get("other_user_id"))
+                        limit = data.get("limit", 50)
+                        before_id = data.get("before_id")
+                        if before_id:
+                            before_id = UUID(before_id)
+                        result = await dm_service.get_history(user_id, other_user_id, limit, before_id)
+                        return {"status": "success", "action": action, "data": [m.model_dump(mode="json") for m in result]}
+
+                    # ── 5. User Actions ────────────────────────────────────────
+                    elif action == "user.online_list":
+                        online_users = await user_repo.get_online_users()
+                        result = [UserShort.model_validate(u).model_dump(mode="json") for u in online_users]
+                        return {"status": "success", "action": action, "data": result}
+
+                    # ── 6. Reaction Actions ────────────────────────────────────
+                    elif action == "reaction.add":
+                        message_id = UUID(data.get("message_id"))
+                        reaction_in = ReactionBase(**data)
+                        await msg_service.add_reaction(message_id, user_id, reaction_in.emoji)
+                        return {"status": "success", "action": action, "message": "Reaction added"}
+
+                    elif action == "reaction.remove":
+                        message_id = UUID(data.get("message_id"))
+                        emoji = data.get("emoji")
+                        removed = await msg_service.remove_reaction(message_id, user_id, emoji)
+                        if removed:
+                            return {"status": "success", "action": action, "message": "Reaction removed"}
+                        return {"status": "error", "action": action, "message": "Reaction not found"}
 
                     else:
                         return {"status": "error", "action": action, "message": f"Unknown action: {action}"}

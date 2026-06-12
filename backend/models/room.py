@@ -22,7 +22,7 @@ class Room(Base):
 
     created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    last_message_at: Mapped[TIMESTAMP] = mapped_column(TIMESTAMP)
+    last_message_at: Mapped[TIMESTAMP] = mapped_column(TIMESTAMP(timezone=True))
 
     # Relationships
     creator: Mapped["User"] = relationship(back_populates="created_rooms")

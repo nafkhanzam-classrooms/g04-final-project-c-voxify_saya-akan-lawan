@@ -69,6 +69,18 @@ class ConnectionManager:
             except socket.error:
                 print(f"[!] Failed to send broadcast to user {user_id} in room {room_id}")
 
+    def broadcast_global(self, message: dict):
+        """Kirim pesan broadcast ke seluruh user yang sedang terkoneksi."""
+        with self.lock:
+            targets = list(self.active_connections.items())
+        
+        print(f"[*] Broadcasting globally to {len(targets)} client(s)")
+        for user_id, sock in targets:
+            try:
+                send_message(sock, message)
+            except socket.error:
+                print(f"[!] Failed to send global broadcast to user {user_id}")
+
 
 # Global manager instance
 manager = ConnectionManager()
