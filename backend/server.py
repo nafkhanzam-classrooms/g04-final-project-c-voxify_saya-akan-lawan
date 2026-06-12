@@ -78,6 +78,25 @@ class ThreadedTCPServer:
                     send_message(client_sock, response)
                     print(f"[<] Response: {response.get('status')} for {action}")
 
+                elif action == "auth.validate_token":
+                    response = loop.run_until_complete(dispatcher.dispatch(request))
+                    if response["status"] == "success":
+                        new_user_id = UUID(response["data"]["user"]["id"])
+                        if user_id and user_id != new_user_id:
+                            manager.disconnect(user_id)
+                        user_id = new_user_id
+                        manager.connect(user_id, client_sock)
+                        # Broadcast user online
+                        manager.broadcast_global({
+                            "type": "user_presence",
+                            "user_id": str(user_id),
+                            "is_online": True,
+                            "username": response["data"]["user"]["username"],
+                            "display_name": response["data"]["user"].get("display_name")
+                        })
+                    send_message(client_sock, response)
+                    print(f"[<] Response: {response.get('status')} for {action}")
+
                 elif action == "room.join_socket":
                     room_id = request.get("data", {}).get("room_id")
                     if user_id and room_id:

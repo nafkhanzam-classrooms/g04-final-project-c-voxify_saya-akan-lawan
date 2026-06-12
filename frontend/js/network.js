@@ -1,5 +1,5 @@
 export class VoxifyNetworkClient {
-  constructor(url = "ws://127.0.0.1:8000") {
+  constructor(url = "ws://127.0.0.1:8080") {
     this.url = url;
     this.socket = null;
     this.isConnected = false;

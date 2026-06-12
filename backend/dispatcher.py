@@ -75,6 +75,28 @@ class Dispatcher:
                         result = await auth_service.login(login_data)
                         return {"status": "success", "action": action, "data": result.model_dump(mode="json")}
 
+                    elif action == "auth.validate_token":
+                        # Validate token and return user data for session restore
+                        if not token:
+                            return {"status": "error", "action": action, "message": "No token provided", "code": 401}
+                        validated_user_id = await get_user_from_token(token)
+                        if not validated_user_id:
+                            return {"status": "error", "action": action, "message": "Invalid or expired token", "code": 401}
+                        user = await user_repo.get(validated_user_id)
+                        if not user:
+                            return {"status": "error", "action": action, "message": "User not found", "code": 404}
+                        # Mark user online in DB (same as login)
+                        await user_repo.update_online_status(user.id, True)
+                        await session.commit()
+                        # Re-fetch after update so is_online=True is reflected in response
+                        user = await user_repo.get(validated_user_id)
+                        user_data = UserRead.model_validate(user)
+                        return {"status": "success", "action": action, "data": {
+                            "access_token": token,
+                            "token_type": "bearer",
+                            "user": user_data.model_dump(mode="json")
+                        }}
+
                     # ── Guard: semua action di bawah butuh autentikasi ─────────
                     elif not user_id:
                         return {"status": "error", "action": action, "message": "Unauthorized", "code": 401}

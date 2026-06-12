@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Voxify Messenger - Group 04</title>
+    <meta name="description" content="Voxify - Real-time chat application built with raw TCP sockets for Network Programming course" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -13,6 +14,7 @@
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
+    <!-- ═══════ AUTH SCREENS ═══════ -->
     <div id="auth-container">
       <div id="auth-login-view" class="auth-card">
         <h1>VOXIFY SIGN IN</h1>
@@ -61,10 +63,13 @@
       </div>
     </div>
 
+    <!-- ═══════ DASHBOARD ═══════ -->
     <div id="dashboard-container" class="hidden">
+      <!-- ── Left Sidebar ── -->
       <div class="sidebar">
         <div class="profile-box">
           <span id="user-display-tag">🟢 Connecting...</span>
+          <button id="btn-logout" class="btn-logout" title="Logout">⏻</button>
         </div>
 
         <div class="sidebar-section">
@@ -84,11 +89,25 @@
           </div>
           <div id="dms-list"></div>
         </div>
+
+        <div class="sidebar-section sidebar-section--online">
+          <div class="section-header">
+            <span class="category-title">👥 ONLINE USERS</span>
+            <span id="online-count" class="online-count-badge">0</span>
+          </div>
+          <div id="online-users-list"></div>
+        </div>
       </div>
 
+      <!-- ── Chat Pane (center) ── -->
       <div class="chat-pane">
         <div id="active-chat-header" class="chat-header">
-          # select-a-channel
+          <span id="chat-header-title"># select-a-channel</span>
+          <div class="chat-header-actions">
+            <button id="btn-show-invite" class="chat-header-btn hidden" title="Show Invite Code">🔗</button>
+            <button id="btn-show-members" class="chat-header-btn hidden" title="Show Members">👥</button>
+            <button id="btn-leave-room" class="chat-header-btn hidden" title="Leave Room">🚪</button>
+          </div>
         </div>
         <div id="chat-log" class="chat-log"></div>
 
@@ -103,8 +122,18 @@
           <button id="btn-send" class="btn-send">SEND</button>
         </div>
       </div>
+
+      <!-- ── Right Panel (Members / Invite) ── -->
+      <div id="right-panel" class="right-panel hidden">
+        <div class="right-panel-header">
+          <span id="right-panel-title">Panel</span>
+          <button id="btn-close-right-panel" class="right-panel-close">✕</button>
+        </div>
+        <div id="right-panel-body" class="right-panel-body"></div>
+      </div>
     </div>
 
+    <!-- ═══════ ROOM MODAL ═══════ -->
     <div id="room-modal" class="modal-backdrop hidden">
       <div class="modal-card">
         <h2 id="modal-title">Create Room</h2>
@@ -117,11 +146,33 @@
             <label id="modal-label-2">TOPIC</label>
             <input type="text" id="modal-input-2" autocomplete="off" />
           </div>
+          <!-- Invite code result shown after room creation -->
+          <div id="modal-invite-result" class="invite-result hidden">
+            <label>INVITE CODE</label>
+            <div class="invite-code-display">
+              <code id="modal-invite-code"></code>
+              <button id="btn-copy-invite" class="btn-copy" title="Copy">📋</button>
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button id="btn-modal-cancel" class="btn-secondary">Cancel</button>
           <button id="btn-modal-submit" class="btn-primary">Submit</button>
         </div>
+      </div>
+    </div>
+
+    <!-- ═══════ EMOJI PICKER (floating) ═══════ -->
+    <div id="emoji-picker" class="emoji-picker hidden">
+      <div class="emoji-picker-grid">
+        <span class="emoji-option" data-emoji="👍">👍</span>
+        <span class="emoji-option" data-emoji="❤️">❤️</span>
+        <span class="emoji-option" data-emoji="😂">😂</span>
+        <span class="emoji-option" data-emoji="😮">😮</span>
+        <span class="emoji-option" data-emoji="😢">😢</span>
+        <span class="emoji-option" data-emoji="🔥">🔥</span>
+        <span class="emoji-option" data-emoji="👎">👎</span>
+        <span class="emoji-option" data-emoji="🎉">🎉</span>
       </div>
     </div>
 
