@@ -17,12 +17,10 @@ export class VoxifyNetworkClient {
 
       this.socket.onmessage = (event) => {
         const packet = JSON.parse(event.data);
-        if (packet.type && this.messageHandlers.has(packet.type)) {
-          this.messageHandlers.get(packet.type)(packet.data);
-        } else if (packet.status) {
-          if (this.messageHandlers.has(packet.action)) {
-            this.messageHandlers.get(packet.action)(packet);
-          }
+        if (packet.action && this.messageHandlers.has(packet.action)) {
+          this.messageHandlers.get(packet.action)(packet);
+        } else if (packet.type && this.messageHandlers.has(packet.type)) {
+          this.messageHandlers.get(packet.type)(packet);
         }
       };
 
@@ -35,8 +33,8 @@ export class VoxifyNetworkClient {
     }
   }
 
-  registerHandler(type, callback) {
-    this.messageHandlers.set(type, callback);
+  registerHandler(action, callback) {
+    this.messageHandlers.set(action, callback);
   }
 
   sendPacket(action, data = {}) {
@@ -44,8 +42,8 @@ export class VoxifyNetworkClient {
     const token = localStorage.getItem("voxify_token");
     const packet = {
       action: action,
-      token: token,
       data: data,
+      token: token || null,
     };
     this.socket.send(JSON.stringify(packet));
   }

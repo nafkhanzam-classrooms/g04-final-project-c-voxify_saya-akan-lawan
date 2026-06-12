@@ -1,7 +1,6 @@
 export class DashboardModule {
   constructor(appController) {
     this.app = appController;
-
     this.userDisplayTag = document.getElementById("user-display-tag");
     this.roomsList = document.getElementById("rooms-list");
     this.dmsList = document.getElementById("dms-list");
@@ -9,14 +8,11 @@ export class DashboardModule {
     this.chatHeader = document.getElementById("active-chat-header");
     this.entryBox = document.getElementById("entry-box");
     this.btnSend = document.getElementById("btn-send");
-
     this.actionCreateRoom = document.getElementById("action-create-room");
     this.actionJoinRoom = document.getElementById("action-join-room");
-
     this.roomModal = document.getElementById("room-modal");
     this.modalTitle = document.getElementById("modal-title");
     this.modalLabel1 = document.getElementById("modal-label-1");
-    this.modalLabel2 = document.getElementById("modal-label-2");
     this.modalInput1 = document.getElementById("modal-input-1");
     this.modalInput2 = document.getElementById("modal-input-2");
     this.modalField2 = document.getElementById("modal-field-2");
@@ -36,7 +32,6 @@ export class DashboardModule {
     this.entryBox.addEventListener("keypress", (e) => {
       if (e.key === "Enter") this.sendMessage();
     });
-
     this.actionCreateRoom.addEventListener("click", () =>
       this.openModal("create"),
     );
@@ -45,44 +40,48 @@ export class DashboardModule {
     this.btnModalSubmit.addEventListener("click", () =>
       this.handleModalSubmit(),
     );
-
     this.chatLog.addEventListener("scroll", () => {
-      if (this.chatLog.scrollTop === 0) {
-        this.loadMoreHistory();
-      }
+      if (this.chatLog.scrollTop === 0) this.loadMoreHistory();
     });
   }
 
   initNetwork() {
-    this.app.network.registerHandler("new_message", (data) => {
+    this.app.network.registerHandler("message.new", (packet) => {
       if (
-        this.activeChatId === data.room_id ||
-        this.activeChatId === data.sender.id
+        this.activeChatId === packet.data.room_id ||
+        this.activeChatId === packet.data.sender.id
       ) {
-        this.appendMessage(data);
+        this.appendMessage(packet.data);
       } else {
-        this.incrementUnread(data);
+        this.refreshSidebar();
       }
     });
 
-    this.app.network.registerHandler("room_created", () => {
-      this.closeModal();
-      this.refreshSidebar();
+    this.app.network.registerHandler("room.create", (packet) => {
+      if (packet.status === "success") {
+        this.closeModal();
+        this.refreshSidebar();
+      }
     });
 
-    this.app.network.registerHandler("room_joined", () => {
-      this.closeModal();
-      this.refreshSidebar();
+    this.app.network.registerHandler("room.join", (packet) => {
+      if (packet.status === "success") {
+        this.closeModal();
+        this.refreshSidebar();
+      }
     });
 
-    this.app.network.registerHandler("rooms_list_data", (rooms) =>
-      this.renderRooms(rooms),
+    this.app.network.registerHandler("room.list", (packet) =>
+      this.renderRooms(packet.data),
     );
-    this.app.network.registerHandler("dms_list_data", (conversations) =>
-      this.renderDMs(conversations),
+    this.app.network.registerHandler("dm.conversations", (packet) =>
+      this.renderDMs(packet.data),
     );
-    this.app.network.registerHandler("chat_history_data", (messages) =>
-      this.renderHistory(messages),
+    this.app.network.registerHandler("room.history", (packet) =>
+      this.renderHistory(packet.data),
+    );
+    this.app.network.registerHandler("dm.history", (packet) =>
+      this.renderHistory(packet.data),
     );
   }
 
@@ -91,8 +90,8 @@ export class DashboardModule {
   }
 
   refreshSidebar() {
-    this.app.network.sendPacket("get_rooms");
-    this.app.network.sendPacket("get_dms");
+    this.app.network.sendPacket("room.list");
+    this.app.network.sendPacket("dm.conversations");
   }
 
   openModal(mode) {
@@ -100,7 +99,6 @@ export class DashboardModule {
     this.roomModal.classList.remove("hidden");
     this.modalInput1.value = "";
     this.modalInput2.value = "";
-
     if (mode === "create") {
       this.modalTitle.textContent = "Create Room";
       this.modalLabel1.textContent = "ROOM NAME";
@@ -119,13 +117,12 @@ export class DashboardModule {
   handleModalSubmit() {
     const val1 = this.modalInput1.value.trim();
     const val2 = this.modalInput2.value.trim();
-
     if (!val1) return;
 
     if (this.currentModalMode === "create") {
-      this.app.network.sendPacket("create_room", { name: val1, topic: val2 });
+      this.app.network.sendPacket("room.create", { name: val1, topic: val2 });
     } else {
-      this.app.network.sendPacket("join_room", { invite_code: val1 });
+      this.app.network.sendPacket("room.join", { invite_code: val1 });
     }
   }
 
@@ -147,12 +144,10 @@ export class DashboardModule {
     conversations.forEach((dm) => {
       const div = document.createElement("div");
       div.className = `dm-item ${this.activeChatId === dm.user_id ? "active" : ""}`;
-
       let badgeHtml =
         dm.unread_count > 0
           ? `<span class="unread-badge">${dm.unread_count}</span>`
           : "";
-
       div.innerHTML = `
                 <div>
                     <span>${dm.display_name}</span>
@@ -176,12 +171,15 @@ export class DashboardModule {
     const items = document.querySelectorAll(".room-item, .dm-item");
     items.forEach((el) => el.classList.remove("active"));
 
-    this.app.network.sendPacket("get_chat_history", {
-      chat_type: type,
-      target_id: id,
-      limit: 50,
-    });
-
+    if (type === "room") {
+      this.app.network.sendPacket("room.history", { room_id: id, limit: 50 });
+    } else {
+      this.app.network.sendPacket("dm.history", {
+        other_user_id: id,
+        limit: 50,
+        before_id: null,
+      });
+    }
     this.refreshSidebar();
   }
 
@@ -189,12 +187,18 @@ export class DashboardModule {
     const text = this.entryBox.value.trim();
     if (!text || !this.activeChatId) return;
 
-    this.app.network.sendPacket("send_message", {
-      chat_type: this.activeChatType,
-      target_id: this.activeChatId,
-      content: text,
-    });
-
+    if (this.activeChatType === "room") {
+      this.app.network.sendPacket("room.send", {
+        room_id: this.activeChatId,
+        content: text,
+      });
+    } else {
+      this.app.network.sendPacket("dm.send", {
+        receiver_id: this.activeChatId,
+        content: text,
+        file_metadata: null,
+      });
+    }
     this.entryBox.value = "";
   }
 
@@ -221,7 +225,6 @@ export class DashboardModule {
             <div class="message-content">${msg.content}</div>
             ${reactionsHtml}
         `;
-
     this.chatLog.appendChild(card);
     this.chatLog.scrollTop = this.chatLog.scrollHeight;
   }
@@ -234,17 +237,19 @@ export class DashboardModule {
   loadMoreHistory() {
     const firstMsg = this.chatLog.firstElementChild;
     if (!firstMsg) return;
-
     const beforeId = firstMsg.getAttribute("data-msg-id");
-    this.app.network.sendPacket("get_chat_history", {
-      chat_type: this.activeChatType,
-      target_id: this.activeChatId,
-      limit: 50,
-      before_id: beforeId,
-    });
-  }
-
-  incrementUnread(data) {
-    this.refreshSidebar();
+    if (this.activeChatType === "room") {
+      this.app.network.sendPacket("room.history", {
+        room_id: this.activeChatId,
+        limit: 50,
+        before_id: beforeId,
+      });
+    } else {
+      this.app.network.sendPacket("dm.history", {
+        other_user_id: this.activeChatId,
+        limit: 50,
+        before_id: beforeId,
+      });
+    }
   }
 }
