@@ -46,12 +46,21 @@ export class DashboardModule {
   }
 
   initNetwork() {
-    this.app.network.registerHandler("message.new", (packet) => {
+    this.app.network.registerHandler("new_message", (packet) => {
+      if (this.activeChatId === packet.room_id) {
+        this.appendMessage(packet.message);
+      } else {
+        this.refreshSidebar();
+      }
+    });
+
+    this.app.network.registerHandler("new_dm", (packet) => {
+      const msg = packet.message;
       if (
-        this.activeChatId === packet.data.room_id ||
-        this.activeChatId === packet.data.sender.id
+        this.activeChatId === msg.sender.id ||
+        this.activeChatId === msg.receiver_id
       ) {
-        this.appendMessage(packet.data);
+        this.appendMessage(msg);
       } else {
         this.refreshSidebar();
       }
@@ -77,7 +86,7 @@ export class DashboardModule {
     this.app.network.registerHandler("dm.conversations", (packet) =>
       this.renderDMs(packet.data),
     );
-    this.app.network.registerHandler("room.history", (packet) =>
+    this.app.network.registerHandler("message.history", (packet) =>
       this.renderHistory(packet.data),
     );
     this.app.network.registerHandler("dm.history", (packet) =>
@@ -143,20 +152,25 @@ export class DashboardModule {
     this.dmsList.innerHTML = "";
     conversations.forEach((dm) => {
       const div = document.createElement("div");
-      div.className = `dm-item ${this.activeChatId === dm.user_id ? "active" : ""}`;
+      div.className = `dm-item ${this.activeChatId === dm.other_user.id ? "active" : ""}`;
       let badgeHtml =
         dm.unread_count > 0
           ? `<span class="unread-badge">${dm.unread_count}</span>`
           : "";
+
       div.innerHTML = `
                 <div>
-                    <span>${dm.display_name}</span>
+                    <span>${dm.other_user.display_name || dm.other_user.username}</span>
                     <span class="dm-preview">${dm.last_message || ""}</span>
                 </div>
                 ${badgeHtml}
             `;
       div.addEventListener("click", () =>
-        this.switchChannel("dm", dm.user_id, dm.display_name),
+        this.switchChannel(
+          "dm",
+          dm.other_user.id,
+          dm.other_user.display_name || dm.other_user.username,
+        ),
       );
       this.dmsList.appendChild(div);
     });
