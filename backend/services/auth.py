@@ -23,7 +23,7 @@ class AuthService:
         hashed_password = get_password_hash(user_in.password)
         user_data = user_in.model_dump(exclude={"password"})
         user_data["hashed_password"] = hashed_password
-        
+
         new_user = await self.user_repo.create(**user_data)
         await self.user_repo.session.commit()
         return UserRead.model_validate(new_user)
@@ -41,8 +41,5 @@ class AuthService:
         access_token = create_access_token(
             data={"sub": str(user.id)}, expires_delta=access_token_expires
         )
-        
-        return Token(
-            access_token=access_token,
-            user=UserRead.model_validate(user)
-        )
+
+        return Token(access_token=access_token, user=UserRead.model_validate(user))

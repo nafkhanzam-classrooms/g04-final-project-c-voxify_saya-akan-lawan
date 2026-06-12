@@ -2,6 +2,7 @@ from uuid import UUID
 from repositories.message import MessageRepository
 from repositories.room import RoomRepository
 from schema.message import MessageCreate, MessageRead, ReactionSummary
+from utils.exceptions import AppException
 from services.websocket_manager import manager
 from utils.exceptions import AppException
 
@@ -64,18 +65,15 @@ class MessageService:
             raise AppException("You are not a member of this room.", 403)
             
         message_data = message_in.model_dump()
-        message_data.update({
-            "room_id": room_id,
-            "sender_id": sender_id
-        })
-        
+        message_data.update({"room_id": room_id, "sender_id": sender_id})
+
         new_message = await self.message_repo.create(**message_data)
-        
+
         # Update room last_message_at
         await self.room_repo.update(room_id, last_message_at=new_message.created_at)
-        
+
         await self.message_repo.session.commit()
-        
+
         # Reload message with sender and reactions to match MessageRead
         messages = await self.message_repo.get_room_messages(room_id, limit=1)
         if not messages:
@@ -108,20 +106,24 @@ class MessageService:
             {
                 "type": "new_message",
                 "room_id": str(room_id),
-                "message": msg_read.model_dump(mode="json")
-            }
+                "message": msg_read.model_dump(mode="json"),
+            },
         )
-        
+
         return msg_read
 
     async def get_messages(
-        self, room_id: UUID, user_id: UUID, limit: int = 50, before_id: UUID | None = None
+        self,
+        room_id: UUID,
+        user_id: UUID,
+        limit: int = 50,
+        before_id: UUID | None = None,
     ) -> list[MessageRead]:
         if not await self.room_repo.is_member(room_id, user_id):
             raise AppException("You are not a member of this room.", 403)
             
         messages = await self.message_repo.get_room_messages(room_id, limit, before_id)
-        
+
         # Convert to MessageRead and handle reaction summaries
         result = []
         for msg in messages:
@@ -129,7 +131,9 @@ class MessageService:
             summaries = {}
             for r in msg.reactions:
                 if r.emoji not in summaries:
-                    summaries[r.emoji] = ReactionSummary(emoji=r.emoji, count=0, me=False)
+                    summaries[r.emoji] = ReactionSummary(
+                        emoji=r.emoji, count=0, me=False
+                    )
                 summaries[r.emoji].count += 1
                 if r.user_id == user_id:
                     summaries[r.emoji].me = True
@@ -146,5 +150,5 @@ class MessageService:
             }
             msg_read = MessageRead.model_validate(msg_data)
             result.append(msg_read)
-            
+
         return result
