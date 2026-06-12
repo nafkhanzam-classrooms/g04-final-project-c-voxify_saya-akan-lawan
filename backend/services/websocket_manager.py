@@ -47,8 +47,9 @@ class ConnectionManager:
         if sock:
             try:
                 send_message(sock, message)
+                print(f"[*] Sent personal message to user {user_id}")
             except socket.error:
-                pass
+                print(f"[!] Failed to send personal message to user {user_id}")
 
     def broadcast_to_room(self, room_id: UUID, message: dict):
         # Snapshot semua socket target di dalam lock, kirim di LUAR lock.
@@ -61,11 +62,12 @@ class ConnectionManager:
                 if uid in self.active_connections
             ]
 
+        print(f"[*] Broadcasting to room {room_id}: {len(targets)} recipient(s)")
         for user_id, sock in targets:
             try:
                 send_message(sock, message)
             except socket.error:
-                pass
+                print(f"[!] Failed to send broadcast to user {user_id} in room {room_id}")
 
 
 # Global manager instance

@@ -1,6 +1,7 @@
 backend/.venv
 AGENTS.md
 GEMINI.md
+CLAUDE.md
 PLAN.md
 __pycache__
 .env

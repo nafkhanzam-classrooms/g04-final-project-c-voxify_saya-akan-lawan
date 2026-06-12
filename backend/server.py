@@ -56,6 +56,7 @@ class ThreadedTCPServer:
                     break  # Client disconnected, timeout, atau payload invalid
 
                 action = request.get("action")
+                print(f"[>] Received action: {action} from user {user_id or 'anonymous'}")
 
                 if action == "auth.login":
                     response = loop.run_until_complete(dispatcher.dispatch(request))
@@ -67,6 +68,7 @@ class ThreadedTCPServer:
                         user_id = new_user_id
                         manager.connect(user_id, client_sock)
                     send_message(client_sock, response)
+                    print(f"[<] Response: {response.get('status')} for {action}")
 
                 elif action == "room.join_socket":
                     room_id = request.get("data", {}).get("room_id")
@@ -76,6 +78,7 @@ class ThreadedTCPServer:
 
                 else:
                     response = loop.run_until_complete(dispatcher.dispatch(request, client_id=user_id))
+                    print(f"[<] Response: {response.get('status')} for {action}")
                     send_message(client_sock, response)
 
         except Exception as e:
