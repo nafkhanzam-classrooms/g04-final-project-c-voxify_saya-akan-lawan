@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Voxify Messenger - Group 04</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div id="auth-container">
+      <div id="auth-login-view" class="auth-card">
+        <h1>VOXIFY SIGN IN</h1>
+        <p>Kelompok G04 - Pemrograman Jaringan</p>
+        <div class="input-group">
+          <label>USERNAME</label>
+          <input type="text" id="login-username" autocomplete="off" />
+        </div>
+        <div class="input-group">
+          <label>PASSWORD</label>
+          <input type="password" id="login-password" />
+        </div>
+        <button id="btn-execute-login" class="btn-primary">
+          LOG IN System
+        </button>
+        <div class="auth-toggle">
+          Belum punya akun? <span id="link-to-register">Daftar sekarang</span>
+        </div>
+      </div>
+
+      <div id="auth-register-view" class="auth-card hidden">
+        <h1>CREATE ACCOUNT</h1>
+        <p>Kelompok G04 - Pemrograman Jaringan</p>
+        <div class="input-group">
+          <label>USERNAME</label>
+          <input type="text" id="reg-username" autocomplete="off" />
+        </div>
+        <div class="input-group">
+          <label>EMAIL ADDRESS</label>
+          <input type="email" id="reg-email" autocomplete="off" />
+        </div>
+        <div class="input-group">
+          <label>DISPLAY NAME</label>
+          <input type="text" id="reg-display" autocomplete="off" />
+        </div>
+        <div class="input-group">
+          <label>PASSWORD</label>
+          <input type="password" id="reg-password" />
+        </div>
+        <button id="btn-execute-register" class="btn-primary">
+          REGISTER SYSTEM
+        </button>
+        <div class="auth-toggle">
+          Sudah punya akun? <span id="link-to-login">Masuk sistem</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="dashboard-container" class="hidden">
+      <div class="sidebar">
+        <div class="profile-box">
+          <span id="user-display-tag">🟢 Connecting...</span>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="section-header">
+            <span class="category-title">💬 TEXT ROOMS</span>
+            <div class="header-actions">
+              <span id="action-create-room" title="Create Room">+</span>
+              <span id="action-join-room" title="Join Room">🔗</span>
+            </div>
+          </div>
+          <div id="rooms-list"></div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="section-header">
+            <span class="category-title">✉️ DIRECT MESSAGES</span>
+          </div>
+          <div id="dms-list"></div>
+        </div>
+      </div>
+
+      <div class="chat-pane">
+        <div id="active-chat-header" class="chat-header">
+          # select-a-channel
+        </div>
+        <div id="chat-log" class="chat-log"></div>
+
+        <div class="input-dock">
+          <div class="entry-container">
+            <input
+              type="text"
+              id="entry-box"
+              placeholder="Ketik pesan di sini..."
+            />
+          </div>
+          <button id="btn-send" class="btn-send">SEND</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="room-modal" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <h2 id="modal-title">Create Room</h2>
+        <div class="modal-body">
+          <div class="input-group">
+            <label id="modal-label-1">ROOM NAME</label>
+            <input type="text" id="modal-input-1" autocomplete="off" />
+          </div>
+          <div class="input-group" id="modal-field-2">
+            <label id="modal-label-2">TOPIC</label>
+            <input type="text" id="modal-input-2" autocomplete="off" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-modal-cancel" class="btn-secondary">Cancel</button>
+          <button id="btn-modal-submit" class="btn-primary">Submit</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>
