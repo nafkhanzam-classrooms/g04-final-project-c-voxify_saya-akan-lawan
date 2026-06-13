@@ -119,7 +119,7 @@ Notes: C = Client, S = Server.
 Tiga modul JS utama: `network.js` (WebSocket + routing), `auth.js` (login/register + token), `dashboard.js` (sidebar, chat log, modal, pagination, reactions).
 
 **WebSocket Bridge (`bridge.py`)**
-Menerima koneksi WebSocket dari browser pada port 8080, meneruskan ke TCP Server port 8000. Setiap koneksi WS memiliki satu koneksi TCP tersendiri (1:1 proxy). Relay dua arah berjalan concurrent via `asyncio.gather`.
+Menerima koneksi WebSocket dari browser pada port 8080, meneruskan ke TCP Server port 8000. Setiap koneksi WS memiliki satu koneksi TCP tersendiri. Relay dua arah berjalan concurrent via `asyncio.gather`.
 
 **Raw TCP Server (`server.py`)**
 
