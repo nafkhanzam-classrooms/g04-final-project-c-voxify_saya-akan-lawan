@@ -7,8 +7,8 @@ from utils.protocol import send_message
 
 class ConnectionManager:
     def __init__(self):
-        # active_connections: {user_id: socket}
-        self.active_connections: Dict[UUID, socket.socket] = {}
+        # active_connections: {user_id: set(socket)}
+        self.active_connections: Dict[UUID, Set[socket.socket]] = {}
         # room_members: {room_id: set(user_id)}
         self.room_members: Dict[UUID, Set[UUID]] = {}
         # Lock untuk thread safety — hanya lindungi akses ke dict, bukan I/O
@@ -16,16 +16,27 @@ class ConnectionManager:
 
     def connect(self, user_id: UUID, sock: socket.socket):
         with self.lock:
-            self.active_connections[user_id] = sock
+            if user_id not in self.active_connections:
+                self.active_connections[user_id] = set()
+            self.active_connections[user_id].add(sock)
+            print(f"[MANAGER] User {user_id} connected. Sockets: {len(self.active_connections[user_id])}")
 
-    def disconnect(self, user_id: UUID):
+    def disconnect(self, user_id: UUID, sock: socket.socket) -> bool:
         with self.lock:
             if user_id in self.active_connections:
-                del self.active_connections[user_id]
-
-            # Hapus dari semua room
-            for room_id in self.room_members:
-                self.room_members[room_id].discard(user_id)
+                self.active_connections[user_id].discard(sock)
+                remaining = len(self.active_connections[user_id])
+                print(f"[MANAGER] User {user_id} disconnected. Remaining sockets: {remaining}")
+                if not self.active_connections[user_id]:
+                    del self.active_connections[user_id]
+                    # Hapus dari semua room
+                    for room_id in self.room_members:
+                        self.room_members[room_id].discard(user_id)
+                    print(f"[MANAGER] User {user_id} has NO MORE sockets. Returning True.")
+                    return True
+            else:
+                print(f"[MANAGER] User {user_id} NOT FOUND in active_connections during disconnect.")
+            return False
 
     def join_room(self, room_id: UUID, user_id: UUID):
         with self.lock:
@@ -40,11 +51,10 @@ class ConnectionManager:
 
     def send_personal_message(self, message: dict, user_id: UUID):
         # Ambil socket di dalam lock, kirim di LUAR lock.
-        # Mencegah sock.sendall() yang blocking memegang lock terlalu lama.
         with self.lock:
-            sock = self.active_connections.get(user_id)
+            sockets = list(self.active_connections.get(user_id, set()))
 
-        if sock:
+        for sock in sockets:
             try:
                 send_message(sock, message)
                 print(f"[*] Sent personal message to user {user_id}")
@@ -56,11 +66,11 @@ class ConnectionManager:
         # Jika satu klien lambat, klien lain dan operasi manager tidak terhambat.
         with self.lock:
             member_ids = list(self.room_members.get(room_id, set()))
-            targets = [
-                (uid, self.active_connections[uid])
-                for uid in member_ids
-                if uid in self.active_connections
-            ]
+            targets = []
+            for uid in member_ids:
+                if uid in self.active_connections:
+                    for s in self.active_connections[uid]:
+                        targets.append((uid, s))
 
         print(f"[*] Broadcasting to room {room_id}: {len(targets)} recipient(s)")
         for user_id, sock in targets:
@@ -72,7 +82,10 @@ class ConnectionManager:
     def broadcast_global(self, message: dict):
         """Kirim pesan broadcast ke seluruh user yang sedang terkoneksi."""
         with self.lock:
-            targets = list(self.active_connections.items())
+            targets = []
+            for uid, socks in self.active_connections.items():
+                for s in socks:
+                    targets.append((uid, s))
         
         print(f"[*] Broadcasting globally to {len(targets)} client(s)")
         for user_id, sock in targets:

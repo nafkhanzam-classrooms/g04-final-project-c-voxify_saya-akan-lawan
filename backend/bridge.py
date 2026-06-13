@@ -40,7 +40,16 @@ async def bridge_handler(websocket):
                     await websocket.send(json.dumps(data))
             except Exception as e:
                 print(f"[*] TCP to WS closed: {e}")
-        await asyncio.gather(ws_to_tcp(), tcp_to_ws())
+        ws_task = asyncio.create_task(ws_to_tcp())
+        tcp_task = asyncio.create_task(tcp_to_ws())
+        
+        done, pending = await asyncio.wait(
+            [ws_task, tcp_task],
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        
+        for task in pending:
+            task.cancel()
 
     except ConnectionRefusedError:
         print("[!] Could not connect to TCP Server. Is it running?")
@@ -48,6 +57,10 @@ async def bridge_handler(websocket):
     except Exception as e:
         print(f"[!] Bridge error: {e}")
     finally:
+        try:
+            tcp_sock.shutdown(socket.SHUT_RDWR)
+        except Exception:
+            pass
         tcp_sock.close()
         print("[*] WebSocket connection closed")
 

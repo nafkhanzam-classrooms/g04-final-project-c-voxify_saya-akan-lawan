@@ -498,7 +498,7 @@ export class DashboardModule {
     this.entryBox.value = "";
   }
 
-  appendMessage(msg) {
+  createMessageCard(msg) {
     const isSelf = msg.sender.id === this.app.currentUser.id;
     const card = document.createElement("div");
     card.className = `message-card ${isSelf ? "self" : ""}`;
@@ -549,13 +549,41 @@ export class DashboardModule {
       });
     });
 
+    return card;
+  }
+
+  appendMessage(msg) {
+    const card = this.createMessageCard(msg);
     this.chatLog.appendChild(card);
     this.chatLog.scrollTop = this.chatLog.scrollHeight;
   }
 
   renderHistory(messages) {
-    this.chatLog.innerHTML = "";
-    messages.forEach((msg) => this.appendMessage(msg));
+    if (!messages || messages.length === 0) {
+      if (this.chatLog.innerHTML.includes("Loading history...")) {
+        this.chatLog.innerHTML = "";
+      }
+      return;
+    }
+
+    const isInitialLoad = this.chatLog.innerHTML.includes("Loading history...");
+    if (isInitialLoad) {
+      this.chatLog.innerHTML = "";
+      // Initial load: server returns descending (newest first).
+      // We want chronological order (oldest to newest), so we reverse and append.
+      const chronological = [...messages].reverse();
+      chronological.forEach((msg) => this.appendMessage(msg));
+    } else {
+      // Pagination load: prepend descending messages one by one.
+      // This will place the oldest at the very top.
+      const oldScrollHeight = this.chatLog.scrollHeight;
+      messages.forEach((msg) => {
+        const card = this.createMessageCard(msg);
+        this.chatLog.prepend(card);
+      });
+      // Restore scroll position so it doesn't jump to the top
+      this.chatLog.scrollTop = this.chatLog.scrollHeight - oldScrollHeight;
+    }
   }
 
   loadMoreHistory() {

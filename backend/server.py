@@ -101,13 +101,14 @@ class ThreadedTCPServer:
             logger.exception("Error handling client: %s", e)
         finally:
             if user_id:
-                manager.disconnect(user_id)
-                self._set_user_offline(loop, user_id)
-                manager.broadcast_global({
-                    "type": "user_presence",
-                    "user_id": str(user_id),
-                    "is_online": False,
-                })
+                is_last = manager.disconnect(user_id, client_sock)
+                if is_last:
+                    self._set_user_offline(loop, user_id)
+                    manager.broadcast_global({
+                        "type": "user_presence",
+                        "user_id": str(user_id),
+                        "is_online": False,
+                    })
             loop.close()
             client_sock.close()
             logger.info("Client disconnected (user=%s)", user_id or "anonymous")
@@ -119,7 +120,15 @@ class ThreadedTCPServer:
         new_user_id = UUID(response["data"]["user"]["id"])
 
         if old_user_id and old_user_id != new_user_id:
-            manager.disconnect(old_user_id)
+            is_last = manager.disconnect(old_user_id, client_sock)
+            if is_last:
+                import asyncio
+                ThreadedTCPServer._set_user_offline(asyncio.get_event_loop(), old_user_id)
+                manager.broadcast_global({
+                    "type": "user_presence",
+                    "user_id": str(old_user_id),
+                    "is_online": False,
+                })
 
         manager.connect(new_user_id, client_sock)
         manager.broadcast_global({
