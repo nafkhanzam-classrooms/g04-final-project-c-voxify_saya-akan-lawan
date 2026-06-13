@@ -1,199 +1,187 @@
-from typing import Any, Dict, Optional
+import logging
+from contextlib import asynccontextmanager
+from typing import Any, AsyncGenerator, Dict, Optional
 from uuid import UUID
-
-from jose import jwt, JWTError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-
-from services.security import SECRET_KEY, ALGORITHM
 from db.config import DATABASE_URL
-from repositories.user import UserRepository
-from repositories.room import RoomRepository
-from repositories.message import MessageRepository
 from repositories.direct_message import DirectMessageRepository
-from services.auth import AuthService
-from services.room import RoomService
-from services.message import MessageService
-from services.direct_message import DirectMessageService
-from schema.user import UserCreate, UserLogin, UserRead, UserShort
-from schema.room import RoomCreate, RoomJoin, RoomMemberRead
-from schema.message import MessageCreate, ReactionBase
+from repositories.message import MessageRepository
+from repositories.room import RoomRepository
+from repositories.user import UserRepository
 from schema.direct_message import DMCreate
+from schema.message import MessageCreate, ReactionBase
+from schema.room import RoomCreate, RoomJoin
+from schema.user import UserCreate, UserLogin, UserRead, UserShort
+from services.auth import AuthService, get_user_from_token
+from services.direct_message import DirectMessageService
+from services.message import MessageService
+from services.room import RoomService
 from utils.exceptions import AppException
 
-
-async def get_user_from_token(token: str) -> Optional[UUID]:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
-        if user_id:
-            return UUID(str(user_id))
-    except (JWTError, ValueError):
-        return None
-    return None
+logger = logging.getLogger("voxify.dispatcher")
+_PUBLIC_ACTIONS = frozenset({"auth.register", "auth.login", "auth.validate_token"})
 
 
 class Dispatcher:
+    @staticmethod
+    @asynccontextmanager
+    async def _get_session() -> AsyncGenerator[AsyncSession, None]:
+        engine = create_async_engine(DATABASE_URL, poolclass=NullPool)
+        session_maker = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            async with session_maker() as session:
+                yield session
+        finally:
+            await engine.dispose()
+
+    @staticmethod
+    def _success(action: str, data: Any = None, message: str | None = None) -> Dict[str, Any]:
+        resp: Dict[str, Any] = {"status": "success", "action": action}
+        if data is not None:
+            resp["data"] = data
+        if message is not None:
+            resp["message"] = message
+        return resp
+
+    @staticmethod
+    def _error(action: str, message: str, code: int = 400) -> Dict[str, Any]:
+        return {"status": "error", "action": action, "message": message, "code": code}
+
     async def dispatch(self, request: Dict[str, Any], client_id: Optional[UUID] = None) -> Dict[str, Any]:
         action = request.get("action")
         data = request.get("data", {})
         token = request.get("token")
-
         user_id = client_id
         if token and not user_id:
             user_id = await get_user_from_token(token)
 
-        # Buat engine baru per dispatch agar selalu terikat ke event loop thread saat ini.
-        # NullPool = tidak ada connection pool, koneksi langsung dibuka dan ditutup.
-        # Dispose wajib dipanggil di finally agar resource DB tidak bocor.
-        engine = create_async_engine(DATABASE_URL, echo=True, poolclass=NullPool)
-        session_maker = async_sessionmaker(engine, expire_on_commit=False)
+        async with self._get_session() as session:
+            user_repo = UserRepository(session)
+            room_repo = RoomRepository(session)
+            msg_repo = MessageRepository(session)
+            dm_repo = DirectMessageRepository(session)
 
-        try:
-            async with session_maker() as session:
-                # Init Repos
-                user_repo = UserRepository(session)
-                room_repo = RoomRepository(session)
-                msg_repo = MessageRepository(session)
-                dm_repo = DirectMessageRepository(session)
+            auth_svc = AuthService(user_repo)
+            room_svc = RoomService(room_repo)
+            msg_svc = MessageService(msg_repo, room_repo)
+            dm_svc = DirectMessageService(dm_repo, user_repo)
 
-                # Init Services
-                auth_service = AuthService(user_repo)
-                room_service = RoomService(room_repo)
-                msg_service = MessageService(msg_repo, room_repo)
-                dm_service = DirectMessageService(dm_repo, user_repo)
+            try:
+                if action not in _PUBLIC_ACTIONS and not user_id:
+                    return self._error(action, "Unauthorized", 401)
 
-                try:
-                    # ── 1. Auth Actions (tidak butuh autentikasi) ──────────────
-                    if action == "auth.register":
-                        user_in = UserCreate(**data)
-                        result = await auth_service.register(user_in)
-                        return {"status": "success", "action": action, "data": result.model_dump(mode="json")}
+                handler = getattr(self, f"_handle_{action.replace('.', '_')}", None)
+                if not handler:
+                    return self._error(action, f"Unknown action: {action}")
 
-                    elif action == "auth.login":
-                        login_data = UserLogin(**data)
-                        result = await auth_service.login(login_data)
-                        return {"status": "success", "action": action, "data": result.model_dump(mode="json")}
+                return await handler(
+                    action=action,
+                    data=data,
+                    token=token,
+                    user_id=user_id,
+                    auth_svc=auth_svc,
+                    room_svc=room_svc,
+                    msg_svc=msg_svc,
+                    dm_svc=dm_svc,
+                    user_repo=user_repo,
+                )
 
-                    elif action == "auth.validate_token":
-                        # Validate token and return user data for session restore
-                        if not token:
-                            return {"status": "error", "action": action, "message": "No token provided", "code": 401}
-                        validated_user_id = await get_user_from_token(token)
-                        if not validated_user_id:
-                            return {"status": "error", "action": action, "message": "Invalid or expired token", "code": 401}
-                        user = await user_repo.get(validated_user_id)
-                        if not user:
-                            return {"status": "error", "action": action, "message": "User not found", "code": 404}
-                        # Mark user online in DB (same as login)
-                        await user_repo.update_online_status(user.id, True)
-                        await session.commit()
-                        # Re-fetch after update so is_online=True is reflected in response
-                        user = await user_repo.get(validated_user_id)
-                        user_data = UserRead.model_validate(user)
-                        return {"status": "success", "action": action, "data": {
-                            "access_token": token,
-                            "token_type": "bearer",
-                            "user": user_data.model_dump(mode="json")
-                        }}
+            except AppException as e:
+                return self._error(action, e.message, e.status_code)
+            except Exception as e:
+                logger.exception("Unhandled error in action '%s'", action)
+                return self._error(action, str(e))
 
-                    # ── Guard: semua action di bawah butuh autentikasi ─────────
-                    elif not user_id:
-                        return {"status": "error", "action": action, "message": "Unauthorized", "code": 401}
+    async def _handle_auth_register(self, *, action, data, **_kw):
+        user_in = UserCreate(**data)
+        result = await _kw["auth_svc"].register(user_in)
+        return self._success(action, result.model_dump(mode="json"))
 
-                    # ── 2. Room Actions ────────────────────────────────────────
-                    elif action == "room.create":
-                        room_in = RoomCreate(**data)
-                        result = await room_service.create_room(room_in, user_id)
-                        return {"status": "success", "action": action, "data": result.model_dump(mode="json")}
+    async def _handle_auth_login(self, *, action, data, **_kw):
+        login_data = UserLogin(**data)
+        result = await _kw["auth_svc"].login(login_data)
+        return self._success(action, result.model_dump(mode="json"))
 
-                    elif action == "room.join":
-                        join_in = RoomJoin(**data)
-                        result = await room_service.join_room(join_in.invite_code, user_id)
-                        return {"status": "success", "action": action, "data": result.model_dump(mode="json")}
+    async def _handle_auth_validate_token(self, *, action, token, **_kw):
+        result = await _kw["auth_svc"].validate_token(token)
+        return self._success(action, result.model_dump(mode="json"))
+    
+    async def _handle_room_create(self, *, action, data, user_id, **_kw):
+        room_in = RoomCreate(**data)
+        result = await _kw["room_svc"].create_room(room_in, user_id)
+        return self._success(action, result.model_dump(mode="json"))
 
-                    elif action == "room.list":
-                        result = await room_service.get_my_rooms(user_id)
-                        return {"status": "success", "action": action, "data": [r.model_dump(mode="json") for r in result]}
+    async def _handle_room_join(self, *, action, data, user_id, **_kw):
+        join_in = RoomJoin(**data)
+        result = await _kw["room_svc"].join_room(join_in.invite_code, user_id)
+        return self._success(action, result.model_dump(mode="json"))
 
-                    elif action == "room.leave":
-                        room_id = UUID(data.get("room_id"))
-                        await room_service.leave_room(room_id, user_id)
-                        return {"status": "success", "action": action, "message": "Left room successfully"}
+    async def _handle_room_list(self, *, action, user_id, **_kw):
+        result = await _kw["room_svc"].get_my_rooms(user_id)
+        return self._success(action, [r.model_dump(mode="json") for r in result])
 
-                    elif action == "room.members":
-                        room_id = UUID(data.get("room_id"))
-                        result = await room_service.get_room_members(room_id, user_id)
-                        return {"status": "success", "action": action, "data": [m.model_dump(mode="json") for m in result]}
+    async def _handle_room_leave(self, *, action, data, user_id, **_kw):
+        room_id = UUID(data.get("room_id"))
+        await _kw["room_svc"].leave_room(room_id, user_id)
+        return self._success(action, message="Left room successfully")
 
-                    # ── 3. Message Actions ─────────────────────────────────────
-                    elif action == "message.send":
-                        room_id = UUID(data.get("room_id"))
-                        msg_in = MessageCreate(**data.get("message", {}))
-                        result = await msg_service.send_room_message(room_id, user_id, msg_in)
-                        return {"status": "success", "action": action, "data": result.model_dump(mode="json")}
+    async def _handle_room_members(self, *, action, data, user_id, **_kw):
+        room_id = UUID(data.get("room_id"))
+        result = await _kw["room_svc"].get_room_members(room_id, user_id)
+        return self._success(action, [m.model_dump(mode="json") for m in result])
 
-                    elif action == "message.history":
-                        room_id = UUID(data.get("room_id"))
-                        limit = data.get("limit", 50)
-                        before_id = data.get("before_id")
-                        if before_id:
-                            before_id = UUID(before_id)
-                        result = await msg_service.get_messages(room_id, user_id, limit, before_id)
-                        return {"status": "success", "action": action, "data": [m.model_dump(mode="json") for m in result]}
+    async def _handle_message_send(self, *, action, data, user_id, **_kw):
+        room_id = UUID(data.get("room_id"))
+        msg_in = MessageCreate(**data.get("message", {}))
+        result = await _kw["msg_svc"].send_room_message(room_id, user_id, msg_in)
+        return self._success(action, result.model_dump(mode="json"))
 
-                    # ── 4. DM Actions ──────────────────────────────────────────
-                    elif action == "dm.send":
-                        dm_in = DMCreate(**data)
-                        result = await dm_service.send_dm(user_id, dm_in)
-                        return {"status": "success", "action": action, "data": result.model_dump(mode="json")}
+    async def _handle_message_history(self, *, action, data, user_id, **_kw):
+        room_id = UUID(data.get("room_id"))
+        limit = data.get("limit", 50)
+        before_id = data.get("before_id")
+        if before_id:
+            before_id = UUID(before_id)
+        result = await _kw["msg_svc"].get_messages(room_id, user_id, limit, before_id)
+        return self._success(action, [m.model_dump(mode="json") for m in result])
 
-                    elif action == "dm.conversations":
-                        result = await dm_service.get_my_conversations(user_id)
-                        return {"status": "success", "action": action, "data": [c.model_dump(mode="json") for c in result]}
+    async def _handle_dm_send(self, *, action, data, user_id, **_kw):
+        dm_in = DMCreate(**data)
+        result = await _kw["dm_svc"].send_dm(user_id, dm_in)
+        return self._success(action, result.model_dump(mode="json"))
 
-                    elif action == "dm.history":
-                        other_user_id = UUID(data.get("other_user_id"))
-                        limit = data.get("limit", 50)
-                        before_id = data.get("before_id")
-                        if before_id:
-                            before_id = UUID(before_id)
-                        result = await dm_service.get_history(user_id, other_user_id, limit, before_id)
-                        return {"status": "success", "action": action, "data": [m.model_dump(mode="json") for m in result]}
+    async def _handle_dm_conversations(self, *, action, user_id, **_kw):
+        result = await _kw["dm_svc"].get_my_conversations(user_id)
+        return self._success(action, [c.model_dump(mode="json") for c in result])
 
-                    # ── 5. User Actions ────────────────────────────────────────
-                    elif action == "user.online_list":
-                        online_users = await user_repo.get_online_users()
-                        result = [UserShort.model_validate(u).model_dump(mode="json") for u in online_users]
-                        return {"status": "success", "action": action, "data": result}
+    async def _handle_dm_history(self, *, action, data, user_id, **_kw):
+        other_user_id = UUID(data.get("other_user_id"))
+        limit = data.get("limit", 50)
+        before_id = data.get("before_id")
+        if before_id:
+            before_id = UUID(before_id)
+        result = await _kw["dm_svc"].get_history(user_id, other_user_id, limit, before_id)
+        return self._success(action, [m.model_dump(mode="json") for m in result])
 
-                    # ── 6. Reaction Actions ────────────────────────────────────
-                    elif action == "reaction.add":
-                        message_id = UUID(data.get("message_id"))
-                        reaction_in = ReactionBase(**data)
-                        await msg_service.add_reaction(message_id, user_id, reaction_in.emoji)
-                        return {"status": "success", "action": action, "message": "Reaction added"}
+    async def _handle_user_online_list(self, *, action, **_kw):
+        online_users = await _kw["user_repo"].get_online_users()
+        result = [UserShort.model_validate(u).model_dump(mode="json") for u in online_users]
+        return self._success(action, result)
 
-                    elif action == "reaction.remove":
-                        message_id = UUID(data.get("message_id"))
-                        emoji = data.get("emoji")
-                        removed = await msg_service.remove_reaction(message_id, user_id, emoji)
-                        if removed:
-                            return {"status": "success", "action": action, "message": "Reaction removed"}
-                        return {"status": "error", "action": action, "message": "Reaction not found"}
+    async def _handle_reaction_add(self, *, action, data, user_id, **_kw):
+        message_id = UUID(data.get("message_id"))
+        reaction_in = ReactionBase(**data)
+        await _kw["msg_svc"].add_reaction(message_id, user_id, reaction_in.emoji)
+        return self._success(action, message="Reaction added")
 
-                    else:
-                        return {"status": "error", "action": action, "message": f"Unknown action: {action}"}
-
-                except AppException as e:
-                    return {"status": "error", "action": action, "message": e.message, "code": e.status_code}
-                except Exception as e:
-                    return {"status": "error", "action": action, "message": str(e)}
-
-        finally:
-            # Wajib: buang engine agar koneksi DB dan resource memori dibebaskan
-            await engine.dispose()
+    async def _handle_reaction_remove(self, *, action, data, user_id, **_kw):
+        message_id = UUID(data.get("message_id"))
+        emoji = data.get("emoji")
+        removed = await _kw["msg_svc"].remove_reaction(message_id, user_id, emoji)
+        if removed:
+            return self._success(action, message="Reaction removed")
+        return self._error(action, "Reaction not found")
 
 
 dispatcher = Dispatcher()
-

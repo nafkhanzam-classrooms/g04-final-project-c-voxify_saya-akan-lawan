@@ -1,13 +1,17 @@
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import bcrypt
+from dotenv import load_dotenv
 from jose import jwt
 
-# Settings (Should move to a config file later)
-SECRET_KEY = "SECRET"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
+load_dotenv()
+
+# ── Security Configuration ──────────────────────────────────────────────────
+SECRET_KEY = os.getenv("SECRET_KEY", "DEFAULT_SECRET_KEY")
+ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", str(60 * 24)))
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

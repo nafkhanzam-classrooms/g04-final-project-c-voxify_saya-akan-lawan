@@ -4,7 +4,6 @@ from repositories.direct_message import DirectMessageRepository
 from repositories.user import UserRepository
 from schema.direct_message import ConversationRead, DMCreate, DMRead
 from schema.user import UserShort
-from utils.exceptions import AppException
 from services.websocket_manager import manager
 from utils.exceptions import AppException
 
