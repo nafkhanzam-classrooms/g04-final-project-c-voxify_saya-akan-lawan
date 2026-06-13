@@ -38,6 +38,14 @@ class DirectMessageService:
             },
             dm_in.receiver_id
         )
+        
+        manager.send_personal_message(
+            {
+                "type": "new_dm",
+                "message": dm_read.model_dump(mode="json")
+            },
+            sender_id
+        )
 
         return dm_read
 
