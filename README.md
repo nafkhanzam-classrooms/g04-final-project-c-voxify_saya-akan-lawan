@@ -28,7 +28,7 @@ Voxify merupakan aplikasi pesan real-time berbasis TCP socket yang mendukung tex
 Voxify dibangun dengan arsitektur berlapis:
 
 ```
-Browser (JS)  <-- WebSocket --> Bridge (:8080) <-- Raw TCP --> Server (:8000) <-- async --> PostgreSQL
+Browser (JS)  <-- WebSocket --> Bridge <-- Raw TCP --> Server <-- async --> PostgreSQL
 ```
 
 Backend ditulis Python (SQLAlchemy async + asyncpg + PostgreSQL), frontend HTML/CSS/JS vanilla (ES Modules), tanpa framework tambahan.
@@ -115,14 +115,6 @@ Notes: C = Client, S = Server.
 | Raw TCP Server   | 0.0.0.0   | 8000              |
 | PostgreSQL       | localhost | 5432 (default)    |
 
-**Client (Browser)**
-Tiga modul JS utama: `network.js` (WebSocket + routing), `auth.js` (login/register + token), `dashboard.js` (sidebar, chat log, modal, pagination, reactions).
-
-**WebSocket Bridge (`bridge.py`)**
-Menerima koneksi WebSocket dari browser pada port 8080, meneruskan ke TCP Server port 8000. Setiap koneksi WS memiliki satu koneksi TCP tersendiri. Relay dua arah berjalan concurrent via `asyncio.gather`.
-
-**Raw TCP Server (`server.py`)**
-
 ### Cara Menjalankan
 
 **Prasyarat:** Python 3.13+, `uv`, PostgreSQL aktif.
@@ -145,8 +137,6 @@ uv run python server.py
 
 # 6. Jalankan WebSocket Bridge (terminal baru)
 uv run python bridge.py
-
-# 7. Buka frontend/index.html di browser
 ```
 
 Untuk pengujian langsung ke TCP server tanpa bridge:
